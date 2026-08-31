@@ -184,7 +184,13 @@ async function overpassSearch(tagPairs, lat, lng, radiusMeters) {
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          // Some public Overpass mirrors are stricter with requests that
+          // don't identify themselves — this is a legitimate, well-behaved
+          // app making occasional on-demand queries, not a scraper.
+          "User-Agent": "EnYakinApp/1.0 (contact: nobetci-proxy operator)",
+        },
         body: "data=" + encodeURIComponent(query),
       });
       if (!res.ok) throw new Error(`Overpass request failed: ${res.status}`);
@@ -299,7 +305,12 @@ app.get("/api/places", rateLimit, async (req, res) => {
     res.json(shaped);
   } catch (err) {
     console.error(err);
-    res.status(502).json({ error: "upstream_failed", detail: String(err.message || err) });
+    // Include the underlying cause (DNS failure, connection refused,
+    // timeout, etc.) — "fetch failed" alone doesn't say why, and this
+    // makes it possible to diagnose straight from the browser response
+    // instead of needing to dig through Render's logs.
+    const causeDetail = err.cause ? ` (${err.cause.code || err.cause.message || err.cause})` : "";
+    res.status(502).json({ error: "upstream_failed", detail: String(err.message || err) + causeDetail });
   }
 });
 
