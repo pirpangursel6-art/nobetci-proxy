@@ -183,28 +183,35 @@ const OVERPASS_ENDPOINTS = [
 // include the category word in their own name ("... Eczanesi", "...
 // Market", etc.), the same reasoning that worked well for Google's Text
 // Search earlier.
+// One term per category, not several crammed together — Open Places API's
+// text search appears to match more literally than Google's did, so a
+// query like "market bakkal süpermarket A101 BİM" was actually hurting
+// recall instead of helping it (confirmed via /api/debug-places: it
+// returned zero raw results for "cafe" until simplified). Merged
+// categories keep just their single most common Turkish term; brand
+// names and synonyms were dropped for the same reason.
 const OPEN_PLACES_QUERY = {
-  eczane: "eczane", market: "market bakkal süpermarket A101 BİM", manav: "manav",
-  restoran: "restoran lokanta", atm: "ATM", banka: "banka", benzinlik: "benzin istasyonu",
-  kuafor: "kuaför berber güzellik", kahvehane: "kahvehane kıraathane nargile çay ocağı",
-  avm: "alışveriş merkezi", firin: "fırın unlu mamül pastane", giyim: "giyim mağazası",
-  elektronik: "elektronik teknoloji telefon", metro_tramvay: "metro tramvay otobüs vapur taksi durağı",
-  tamirci: "oto tamirci lastikçi", cilingir: "çilingir", doviz: "döviz bürosu",
-  kozmetik: "kozmetik kuyumcu takı", cami: "cami mescit", belediye: "belediye muhtarlık",
-  tuvalet: "umumi tuvalet", kasap: "kasap şarküteri balıkçı", kirtasiye: "kırtasiye",
-  su_tup: "su bayii tüp bayii", burger: "burger döner pide lahmacun", yedek_parca: "oto yedek parça",
-  tursu_aktar: "turşucu aktar baharatçı çerezci", spor_salonu: "spor salonu fitness halı saha",
-  kahvalti: "kahvaltı salonu", tatlici: "tatlıcı dondurmacı pastane baklava",
-  cafe: "Starbucks Kahve Dünyası Kahve Diyarı cafe", veteriner: "veteriner", optik: "optik gözlükçü",
-  dis_klinigi: "diş kliniği diş hekimi", poliklinik: "özel poliklinik muayenehane",
-  nalbur: "nalbur hırdavatçı", kuru_temizleme: "kuru temizleme çamaşırhane", hali_yikama: "halı yıkama",
-  mobilyaci: "mobilyacı beyaz eşya", cicekci: "çiçekçi", oto_yikama: "oto yıkama",
-  otopark: "otopark", bisikletci: "bisikletçi", ptt: "PTT kargo", emlakci: "emlakçı",
-  avukat: "avukat hukuk bürosu noter", sigorta: "sigorta acentesi", okul: "okul anaokulu kreş",
+  eczane: "eczane", market: "market", manav: "manav",
+  restoran: "restoran", atm: "ATM", banka: "banka", benzinlik: "benzin istasyonu",
+  kuafor: "kuaför", kahvehane: "kahvehane",
+  avm: "alışveriş merkezi", firin: "fırın", giyim: "giyim mağazası",
+  elektronik: "elektronik", metro_tramvay: "durak",
+  tamirci: "oto tamirci", cilingir: "çilingir", doviz: "döviz bürosu",
+  kozmetik: "kozmetik", cami: "cami", belediye: "belediye",
+  tuvalet: "tuvalet", kasap: "kasap", kirtasiye: "kırtasiye",
+  su_tup: "su bayii", burger: "burger", yedek_parca: "oto yedek parça",
+  tursu_aktar: "aktar", spor_salonu: "spor salonu",
+  kahvalti: "kahvaltı salonu", tatlici: "tatlıcı",
+  cafe: "cafe", veteriner: "veteriner", optik: "optik",
+  dis_klinigi: "diş kliniği", poliklinik: "poliklinik",
+  nalbur: "nalbur", kuru_temizleme: "kuru temizleme", hali_yikama: "halı yıkama",
+  mobilyaci: "mobilyacı", cicekci: "çiçekçi", oto_yikama: "oto yıkama",
+  otopark: "otopark", bisikletci: "bisikletçi", ptt: "PTT", emlakci: "emlakçı",
+  avukat: "avukat", sigorta: "sigorta acentesi", okul: "okul",
   kutuphane: "kütüphane", sinema: "sinema", yuzme_havuzu: "yüzme havuzu",
-  bilardo: "bilardo oyun salonu", terzi: "terzi kunduracı", oyuncakci: "oyuncakçı",
-  otel: "otel konaklama", hastane: "hastane", itfaiye: "itfaiye", polis: "polis merkezi",
-  yolyardim: "oto yol yardım çekici",
+  bilardo: "bilardo", terzi: "terzi", oyuncakci: "oyuncakçı",
+  otel: "otel", hastane: "hastane", itfaiye: "itfaiye", polis: "polis merkezi",
+  yolyardim: "çekici",
 };
 
 // Without an explicit timeout, a hung connection attempt can sit for
@@ -444,9 +451,18 @@ async function runOsm(category, lat, lng, radius, limit) {
   if (!osmTags || osmTags.length === 0) return [];
   const elements = await overpassSearch(osmTags, lat, lng, radius);
   const named = elements.filter((el) => el.tags?.name && (el.lat ?? el.center?.lat) != null);
+  // BUG DÜZELTMESİ: mesafe hesaplanıp sıralanıyordu ama gerçekten
+  // yarıçap dışında kalanlar hiç ELENMİYORDU — runOpenPlaces'te olan
+  // .filter() adımı burada eksikti. "Manisa'daki hastane Akhisar'da
+  // görünüyor" sorununun tam sebebi buydu; Overpass'ın kendi around:
+  // filtresi genelde doğru çalışsa da, way-tipi elemanlarda (center
+  // koordinatı kullanılan) bazen isabetsiz olabiliyor — kendi kesin
+  // kontrolümüz olmadan buna güvenmek riskliydi.
   return named
     .map((el, idx) => shapeOsmPlace(el, category, idx))
+    .filter((p) => p.lat != null && p.lng != null)
     .map((p) => ({ ...p, _distance: haversineMeters(Number(lat), Number(lng), p.lat, p.lng) }))
+    .filter((p) => p._distance <= Number(radius))
     .sort((a, b) => a._distance - b._distance)
     .slice(0, Math.min(Number(limit) || 8, 20))
     .map(({ _distance, ...p }, idx) => ({ ...p, idx }));
