@@ -43,8 +43,17 @@ function cacheKeyFor(category, lat, lng, radius, limit, enrichCount) {
 }
 
 // ---- tiny in-memory rate limiter (per IP) ---------------------------------
-// Protects the API key from runaway costs if the URL leaks or gets hammered.
-const RATE_LIMIT = 30; // requests
+// This used to guard the paid Google API key against runaway costs — no
+// longer relevant now that everything runs on OSM/Open Places (the latter
+// has its own hard cap that can never bill an overage). But it was still
+// set to 30/minute, which was actively breaking our own legitimate "Tümü"
+// (all categories) feature: that single button press fires ~59 requests
+// at once, so anything past the 30th was getting a 429 and silently
+// showing up as "no results" for whichever categories happened to land
+// last — that's why a category (like "Cami") could work fine on its own
+// but go missing under "Tümü". Raised well above any real single-person
+// usage pattern; still blocks genuine scripted abuse.
+const RATE_LIMIT = 200; // requests
 const RATE_WINDOW_MS = 60 * 1000; // per minute
 const hits = new Map();
 
