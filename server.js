@@ -121,17 +121,12 @@ const OSM_TAG_CONFIG = {
   tuvalet: [{ key: "amenity", value: "toilets" }],
   kasap: [{ key: "shop", value: "butcher" }, { key: "shop", value: "deli" }, { key: "shop", value: "seafood" }],
   kirtasiye: [{ key: "shop", value: "stationery" }],
-  yedek_parca: [{ key: "shop", value: "car_parts" }],
   cicekci: [{ key: "shop", value: "florist" }],
   oto_yikama: [{ key: "amenity", value: "car_wash" }],
   otopark: [{ key: "amenity", value: "parking" }],
-  bisikletci: [{ key: "shop", value: "bicycle" }],
   ptt: [{ key: "amenity", value: "post_office" }],
   emlakci: [{ key: "office", value: "estate_agent" }],
   okul: [{ key: "amenity", value: "school" }, { key: "amenity", value: "kindergarten" }],
-  kutuphane: [{ key: "amenity", value: "library" }],
-  sinema: [{ key: "amenity", value: "cinema" }],
-  oyuncakci: [{ key: "shop", value: "toys" }],
   otel: [{ key: "tourism", value: "hotel" }],
   veteriner: [{ key: "amenity", value: "veterinary" }],
   optik: [{ key: "shop", value: "optician" }],
@@ -140,7 +135,6 @@ const OSM_TAG_CONFIG = {
   kuru_temizleme: [{ key: "shop", value: "dry_cleaning" }],
   mobilyaci: [{ key: "shop", value: "furniture" }],
   spor_salonu: [{ key: "leisure", value: "fitness_centre" }],
-  yuzme_havuzu: [{ key: "leisure", value: "swimming_pool" }],
   hastane: [{ key: "amenity", value: "hospital" }],
   itfaiye: [{ key: "amenity", value: "fire_station" }],
   polis: [{ key: "amenity", value: "police" }],
@@ -152,19 +146,16 @@ const OSM_TAG_CONFIG = {
     { key: "amenity", value: "taxi" },
   ],
   burger: [{ key: "amenity", value: "fast_food" }],
-  tursu_aktar: [{ key: "shop", value: "deli" }],
   kahvalti: [{ key: "amenity", value: "restaurant" }],
   tatlici: [{ key: "shop", value: "confectionery" }, { key: "amenity", value: "ice_cream" }, { key: "shop", value: "pastry" }],
   poliklinik: [{ key: "amenity", value: "clinic" }],
-  bilardo: [{ key: "leisure", value: "amusement_arcade" }],
   terzi: [{ key: "shop", value: "tailor" }, { key: "shop", value: "shoe_repair" }],
   avukat: [{ key: "office", value: "lawyer" }],
   sigorta: [{ key: "office", value: "insurance" }],
   su_tup: [{ key: "shop", value: "gas" }],
-  // No OSM tag reliably covers these two — they'll just return an empty
+  // No OSM tag reliably covers this one — it'll just return an empty
   // list rather than erroring, honestly reflecting that OSM has no
-  // equivalent for them.
-  hali_yikama: [],
+  // equivalent for it.
   yolyardim: [],
 };
 
@@ -205,20 +196,19 @@ const OPEN_PLACES_QUERY = {
   kuafor: "kuaför", kahvehane: "kahvehane",
   avm: "alışveriş merkezi", firin: "fırın", giyim: "giyim mağazası",
   elektronik: "elektronik", metro_tramvay: "durak",
-  tamirci: "oto tamirci", cilingir: "çilingir", doviz: "döviz bürosu",
+  tamirci: "oto tamirci", cilingir: "çilingir anahtarcı", doviz: "döviz bürosu",
   kozmetik: "kozmetik", cami: "cami", belediye: "belediye",
   tuvalet: "tuvalet", kasap: "kasap", kirtasiye: "kırtasiye",
-  su_tup: "su bayii", burger: "burger", yedek_parca: "oto yedek parça",
-  tursu_aktar: "aktar", spor_salonu: "spor salonu",
+  su_tup: "su bayii", burger: "burger",
+  spor_salonu: "spor salonu",
   kahvalti: "kahvaltı salonu", tatlici: "tatlıcı",
   cafe: "cafe", veteriner: "veteriner", optik: "optik",
   dis_klinigi: "diş kliniği", poliklinik: "poliklinik",
-  nalbur: "nalbur", kuru_temizleme: "kuru temizleme", hali_yikama: "halı yıkama",
+  nalbur: "nalbur", kuru_temizleme: "kuru temizleme",
   mobilyaci: "mobilyacı", cicekci: "çiçekçi", oto_yikama: "oto yıkama",
-  otopark: "otopark", bisikletci: "bisikletçi", ptt: "PTT", emlakci: "emlakçı",
+  otopark: "otopark", ptt: "PTT", emlakci: "emlakçı",
   avukat: "avukat", sigorta: "sigorta acentesi", okul: "okul",
-  kutuphane: "kütüphane", sinema: "sinema", yuzme_havuzu: "yüzme havuzu",
-  bilardo: "bilardo", terzi: "terzi", oyuncakci: "oyuncakçı",
+  terzi: "terzi",
   otel: "otel", hastane: "hastane", itfaiye: "itfaiye", polis: "polis merkezi",
   yolyardim: "çekici",
 };
@@ -497,6 +487,18 @@ async function runOpenPlaces(category, lat, lng, radius, limit) {
     .map(({ _distance, ...p }, idx) => ({ ...p, idx }));
 }
 
+// Bu üç kategoride yanlış sonuç göstermenin bedeli, yavaş olmanın bedelinden
+// çok daha ağır (biri gerçek bir hastane/karakol/itfaiye ararken "Oto Lastik
+// Hastanesi" gibi ismi benzeyen ama alakasız bir işletme çıkması ciddi bir
+// güven sorunu). Bu yüzden bu kategorilerde artık "kim önce cevap verirse"
+// mantığı değil, "önce en güvenilir kaynak" mantığı işliyor: OSM'in
+// yapılandırılmış etiket araması (metne değil gerçek kategoriye bakıyor,
+// bu yüzden isim benzerliğinden kaynaklanan yanlış eşleşme riski yok) önce
+// deneniyor; o gerçekten hiç sonuç bulamazsa Open Places'ın metin aramasına
+// (daha hızlı ama isim-bazlı, dolayısıyla bu tür yanlış eşleşmelere açık)
+// geçiliyor.
+const PRECISION_FIRST_CATEGORIES = new Set(["hastane", "itfaiye", "polis"]);
+
 app.get("/api/places", rateLimit, async (req, res) => {
   // 10km — a hard cutoff (see haversineMeters above).
   const { category, lat, lng, radius = 10000, limit = 8 } = req.query;
@@ -511,16 +513,30 @@ app.get("/api/places", rateLimit, async (req, res) => {
   }
 
   try {
-    const shaped = await firstNonEmpty([
-      runOsm(category, lat, lng, radius, limit).catch((err) => {
+    let shaped;
+    if (PRECISION_FIRST_CATEGORIES.has(category)) {
+      shaped = await runOsm(category, lat, lng, radius, limit).catch((err) => {
         console.error("Overpass lookup failed:", err.message || err);
         return [];
-      }),
-      runOpenPlaces(category, lat, lng, radius, limit).catch((err) => {
-        console.error("Open Places lookup failed:", err.message || err);
-        return [];
-      }),
-    ]);
+      });
+      if (shaped.length === 0) {
+        shaped = await runOpenPlaces(category, lat, lng, radius, limit).catch((err) => {
+          console.error("Open Places lookup failed:", err.message || err);
+          return [];
+        });
+      }
+    } else {
+      shaped = await firstNonEmpty([
+        runOsm(category, lat, lng, radius, limit).catch((err) => {
+          console.error("Overpass lookup failed:", err.message || err);
+          return [];
+        }),
+        runOpenPlaces(category, lat, lng, radius, limit).catch((err) => {
+          console.error("Open Places lookup failed:", err.message || err);
+          return [];
+        }),
+      ]);
+    }
     cache.set(key, { ts: Date.now(), data: shaped });
     res.json(shaped);
   } catch (err) {
