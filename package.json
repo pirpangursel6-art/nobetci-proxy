@@ -1,0 +1,17 @@
+{
+  "name": "nobetci-proxy",
+  "version": "1.0.0",
+  "description": "Backend proxy for the Nöbetçi app — holds the Google Places API key and serves live nearby-place data.",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
